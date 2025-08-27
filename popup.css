@@ -1,0 +1,21 @@
+*{box-sizing:border-box} body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,Arial;background:#0f1220;color:#e6e9ff}
+.wrap{width:360px;padding:14px}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+h1{font-size:18px;margin:0}
+.badge{padding:3px 8px;border-radius:10px;background:#2b2f48;color:#cbd5ff;font-weight:600}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid>label{display:flex;flex-direction:column;font-weight:600;color:#c1c6ff}
+.grid input{margin-top:4px;padding:8px;border-radius:10px;border:1px solid #2d3358;background:#141832;color:#e6e9ff;outline:none}
+.grid input:focus{border-color:#5560ff;box-shadow:0 0 0 2px rgba(85,96,255,0.25)}
+
+.row{grid-column:1/-1;display:flex;gap:14px;align-items:center;margin-top:6px}
+.radio{display:flex;gap:8px;align-items:center;font-weight:600}
+
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+button{flex:1;padding:10px 12px;border-radius:12px;border:1px solid #2d3358;background:#1a1f3d;color:#eef1ff;font-weight:700;cursor:pointer;transition:.15s}
+button:hover{transform:translateY(-1px)}
+button.danger{background:#3d1a1a;border-color:#5a2b2b}
+
+.telemetry{display:grid;gap:6px;background:#0c1024;padding:10px;border:1px solid #2d3358;border-radius:12px}
+.telemetry b{color:#9aa5ff}
