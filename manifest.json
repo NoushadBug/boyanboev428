@@ -3,7 +3,6 @@
   "name": "CarbaCar Auction Bots",
   "description": "Closed Envelope and Classic last-second bidding bots for business.carbacar.it",
   "version": "1.0.0",
-  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
   "permissions": ["storage", "scripting", "activeTab"],
   "host_permissions": ["https://business.carbacar.it/*"],
   "background": { "service_worker": "background.js" },
