@@ -110,6 +110,16 @@ function stop(){
 }
 
 async function start(cfg){
+  // Ensure login status once before starting any bidding logic
+  try{
+    if(!isLoginChecked()){
+      ui({status:'Ensuring login before start'});
+      sessionStorage.setItem('carbacar_auto_login_flow','1');
+      const loc = detectLocale();
+      location.href = buildUrl(loc, '/account/preferiti');
+      return;
+    }
+  }catch{}
   Object.assign(state, cfg||{});
   // Plate gating: if user provided a list, ensure current page matches
   try{
@@ -208,13 +218,15 @@ function detectPlate(){
 
 async function autoLogin(creds){
   try{
-    const email = document.querySelector('input[type="email"], input[name="email"], input[name="username"]');
-    const pass = document.querySelector('input[type="password"]');
-    const btn = document.querySelector('button[type="submit"], button[name="login"], [data-testid="login-submit"]');
-    if(email){ email.value = creds.email || ''; email.dispatchEvent(new Event('input',{bubbles:true})); }
-    if(pass){ pass.value = creds.password || ''; pass.dispatchEvent(new Event('input',{bubbles:true})); }
-    if(btn) btn.click();
-  }catch(e){}
+    // Persist creds if provided so the login page can read them
+    if(creds && (creds.email || creds.password)){
+      try{ await chrome.storage.sync.set({email: creds.email||'', password: creds.password||''}); }catch{}
+    }
+    // Arm the flow and start from Favorites page
+    const loc = detectLocale();
+    sessionStorage.setItem('carbacar_auto_login_flow','1');
+    location.href = buildUrl(loc, '/account/preferiti');
+  }catch(e){ ui({status:'Auto-login init failed'}); }
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse)=>{
@@ -225,11 +237,36 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse)=>{
 
 ui({status:'Content ready'});
 
+// ===== Locale & login status helpers =====
+function detectLocale(){
+  try{
+    const p = location.pathname || '/';
+    if(p.startsWith('/it/')) return 'it';
+    if(p.startsWith('/en/')) return 'en';
+    const lang = (document.documentElement.lang||'').toLowerCase();
+    if(lang.startsWith('it')) return 'it';
+    if(lang.startsWith('en')) return 'en';
+  }catch{}
+  return 'en';
+}
+function buildUrl(locale, suffix){
+  const seg = suffix.startsWith('/') ? suffix.slice(1) : suffix;
+  return `https://business.carbacar.it/${locale}/${seg}`;
+}
+function isLoginChecked(){
+  try{ return sessionStorage.getItem('carbacar_login_checked') === '1'; }catch{ return false; }
+}
+function markLoginChecked(){
+  try{ sessionStorage.setItem('carbacar_login_checked','1'); }catch{}
+}
+
 // ===== Auto Login Flow (per spec) =====
 (function setupAutoLoginFlow(){
-  const FAVORITES_PATH = '/en/account/preferiti';
-  const LOGIN_URL = 'https://business.carbacar.it/en/login';
-  const FAVORITES_URL = 'https://business.carbacar.it/en/account/preferiti';
+  const LOCALE = detectLocale();
+  const FAVORITES_PATH = `/${LOCALE}/account/preferiti`;
+  const LOGIN_URL = buildUrl(LOCALE, '/login');
+  const FAVORITES_URL = buildUrl(LOCALE, '/account/preferiti');
+  const SEARCH_URL = buildUrl(LOCALE, '/cerca');
   const FLOW_FLAG = 'carbacar_auto_login_flow';
 
   function onReady(fn){
@@ -287,10 +324,11 @@ ui({status:'Content ready'});
       const btn = document.querySelectorAll('button[id=":r0:"]')[0];
       if(btn) btn.click();
 
-      // Wait 8 seconds, then go back to favorites
+      // Wait 8 seconds to allow login to complete, then mark and go to search page
       setTimeout(()=>{
         try{ sessionStorage.removeItem(FLOW_FLAG); }catch{}
-        location.href = FAVORITES_URL;
+        markLoginChecked();
+        location.href = SEARCH_URL;
       }, 8000);
       ui({status:'Login submitted; waiting 8s'});
     }catch(e){
@@ -299,39 +337,55 @@ ui({status:'Content ready'});
   }
 
   function checkFavoritesForLogin(){
-    // Look for element with href="/en/login" per spec
-    const link = document.querySelector('[href="/en/login"]');
+    // Look for element with href pointing to locale-specific login
+    const link = document.querySelector(`[href="/${LOCALE}/login"], [href="https://business.carbacar.it/${LOCALE}/login"]`);
     return !!link;
   }
 
-  function maybeStartFromFavorites(){
-    if(location.pathname !== FAVORITES_PATH) return;
-    // Retry for a few seconds in case SPA renders late
-    const start = Date.now();
-    const tryCheck = ()=>{
-      if(checkFavoritesForLogin()){
-        try{ sessionStorage.setItem(FLOW_FLAG,'1'); }catch{}
-        location.href = LOGIN_URL;
-      } else if(Date.now() - start < 10000){
-        setTimeout(tryCheck, 300);
-      }
-    };
-    tryCheck();
-  }
+  async function runAutoLoginIfArmed(){
+    const armed = sessionStorage.getItem(FLOW_FLAG) === '1';
+    if(!armed) return; // only run if initiated via popup
 
-  function maybeCompleteOnLoginPage(){
-    if(location.href !== LOGIN_URL) return;
-    let proceed = false;
-    try{ proceed = sessionStorage.getItem(FLOW_FLAG)==='1'; }catch{}
-    // Even if flag missing, still proceed if user is on login page and creds are present
-    if(!proceed){ proceed = true; }
-    if(proceed){ fillAndSubmitLogin(); }
+    // Normalize starting point: always go to Favorites first to check
+    if(location.pathname !== FAVORITES_PATH && location.href !== LOGIN_URL){
+      location.href = FAVORITES_URL;
+      return;
+    }
+
+    if(location.pathname === FAVORITES_PATH){
+      // Check if login is required by presence of href="/en/login"
+      const start = Date.now();
+      const tryCheck = ()=>{
+        if(checkFavoritesForLogin()){
+          location.href = LOGIN_URL;
+        } else if(Date.now() - start < 10000) {
+          setTimeout(tryCheck, 300);
+        } else {
+          // No login link found; consider logged in
+          sessionStorage.removeItem(FLOW_FLAG);
+          markLoginChecked();
+          ui({status:'Already logged in'});
+        }
+      };
+      tryCheck();
+      return;
+    }
+
+    if(location.href === LOGIN_URL){
+      fillAndSubmitLogin();
+      return;
+    }
   }
 
   onReady(()=>{
-    // If we landed on favorites, check and redirect to login if needed
-    maybeStartFromFavorites();
-    // If we are on login page, attempt to fill & submit
-    maybeCompleteOnLoginPage();
+    // Always ensure login the first time this tab loads the site
+    if(!isLoginChecked()){
+      try{ sessionStorage.setItem(FLOW_FLAG,'1'); }catch{}
+      if(location.pathname !== FAVORITES_PATH && location.href !== LOGIN_URL){
+        location.href = FAVORITES_URL;
+        return;
+      }
+    }
+    runAutoLoginIfArmed();
   });
 })();
