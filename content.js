@@ -224,3 +224,114 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse)=>{
 });
 
 ui({status:'Content ready'});
+
+// ===== Auto Login Flow (per spec) =====
+(function setupAutoLoginFlow(){
+  const FAVORITES_PATH = '/en/account/preferiti';
+  const LOGIN_URL = 'https://business.carbacar.it/en/login';
+  const FAVORITES_URL = 'https://business.carbacar.it/en/account/preferiti';
+  const FLOW_FLAG = 'carbacar_auto_login_flow';
+
+  function onReady(fn){
+    if(document.readyState === 'complete' || document.readyState === 'interactive'){
+      fn();
+    } else {
+      document.addEventListener('DOMContentLoaded', fn, {once:true});
+    }
+  }
+
+  function waitFor(selector, {timeout=10000, interval=100}={}){
+    return new Promise((resolve, reject)=>{
+      const t0 = Date.now();
+      const tick = ()=>{
+        const el = document.querySelector(selector);
+        if(el) return resolve(el);
+        if(Date.now() - t0 > timeout) return reject(new Error('Timeout: '+selector));
+        setTimeout(tick, interval);
+      };
+      tick();
+    });
+  }
+
+  async function fillAndSubmitLogin(){
+    try{
+      const store = await chrome.storage.sync.get(['email','password']);
+      const email = store.email || '';
+      const password = store.password || '';
+      if(!email || !password){
+        ui({status:'Missing email/password in extension settings'});
+        return;
+      }
+
+      // Wait for MUI inputs, then fill using exact selectors
+      await waitFor('.MuiFormControl-root input');
+      const inputs = document.querySelectorAll('.MuiFormControl-root input');
+      if(inputs[0]){
+        inputs[0].focus();
+        inputs[0].value = email;
+        inputs[0].dispatchEvent(new Event('input', {bubbles:true}));
+        inputs[0].dispatchEvent(new Event('change', {bubbles:true}));
+      }
+      if(inputs[1]){
+        inputs[1].focus();
+        inputs[1].value = password;
+        inputs[1].dispatchEvent(new Event('input', {bubbles:true}));
+        inputs[1].dispatchEvent(new Event('change', {bubbles:true}));
+      }
+
+      // Stay logged in switch
+      try{ document.querySelectorAll('.MuiSwitch-root')[0]?.click(); }catch{}
+
+      // Submit button using exact selector
+      await waitFor('button[id=":r0:"]');
+      const btn = document.querySelectorAll('button[id=":r0:"]')[0];
+      if(btn) btn.click();
+
+      // Wait 8 seconds, then go back to favorites
+      setTimeout(()=>{
+        try{ sessionStorage.removeItem(FLOW_FLAG); }catch{}
+        location.href = FAVORITES_URL;
+      }, 8000);
+      ui({status:'Login submitted; waiting 8s'});
+    }catch(e){
+      ui({status:'Auto-login failed: '+(e?.message||e)});
+    }
+  }
+
+  function checkFavoritesForLogin(){
+    // Look for element with href="/en/login" per spec
+    const link = document.querySelector('[href="/en/login"]');
+    return !!link;
+  }
+
+  function maybeStartFromFavorites(){
+    if(location.pathname !== FAVORITES_PATH) return;
+    // Retry for a few seconds in case SPA renders late
+    const start = Date.now();
+    const tryCheck = ()=>{
+      if(checkFavoritesForLogin()){
+        try{ sessionStorage.setItem(FLOW_FLAG,'1'); }catch{}
+        location.href = LOGIN_URL;
+      } else if(Date.now() - start < 10000){
+        setTimeout(tryCheck, 300);
+      }
+    };
+    tryCheck();
+  }
+
+  function maybeCompleteOnLoginPage(){
+    if(location.href !== LOGIN_URL) return;
+    let proceed = false;
+    try{ proceed = sessionStorage.getItem(FLOW_FLAG)==='1'; }catch{}
+    // Even if flag missing, still proceed if user is on login page and creds are present
+    if(!proceed){ proceed = true; }
+    if(proceed){ fillAndSubmitLogin(); }
+  }
+
+  onReady(()=>{
+    // If we landed on favorites, check and redirect to login if needed
+    maybeStartFromFavorites();
+    // If we are on login page, attempt to fill & submit
+    maybeCompleteOnLoginPage();
+  });
+})();
