@@ -10,13 +10,15 @@
 const state = {
   enabled: false,
   mode: 'closed',
-  plate: '',
+  plates: [],
   refresh: 1500,
   increment: 10,
+  classicStep: 150,
   maxBid: 0,
   auctionId: null,
   endTime: null,
   bestBid: 0,
+  bestBidTime: null,
   myBid: 0,
   bidTemplate: null,
   lastSeenJson: null,
@@ -24,6 +26,17 @@ const state = {
 };
 
 function ui(p){ chrome.runtime.sendMessage({type:'UI', ...p}); }
+
+function pickTimeField(obj){
+  const keys = Object.keys(obj||{});
+  for(const k of keys){
+    const lk = k.toLowerCase();
+    if(lk.includes('time') || lk.includes('date') || lk.includes('created') || lk==='ts'){
+      return obj[k];
+    }
+  }
+  return null;
+}
 
 function scanJson(json){
   if(!json) return;
@@ -34,16 +47,24 @@ function scanJson(json){
   if(d?.auctionId) state.auctionId = d.auctionId;
   const bids = d?.bids || d?.bets || d?.offers || d?.automaticBets || null;
   let maxPrice = state.bestBid;
+  let maxTime = state.bestBidTime;
   if(Array.isArray(bids)){
     for(const b of bids){
       const p = +(b?.price ?? b?.amount ?? b?.bid ?? b?.assignedPrice ?? 0);
-      if(p > maxPrice) maxPrice = p;
+      if(p > maxPrice){
+        maxPrice = p;
+        maxTime = pickTimeField(b);
+      }
     }
   }
   if(typeof d?.assignedPrice === 'number' && d.assignedPrice > maxPrice) maxPrice = d.assignedPrice;
   if(maxPrice !== state.bestBid){
     state.bestBid = maxPrice;
     ui({bestBid: state.bestBid});
+  }
+  if(maxTime && maxTime !== state.bestBidTime){
+    state.bestBidTime = maxTime;
+    try{ ui({bestBidTime: new Date(maxTime).toLocaleString()}); }catch{ ui({bestBidTime: String(maxTime)}); }
   }
   if(end) ui({endTime: new Date(end).toLocaleString()});
   if(state.auctionId) ui({auctionId: state.auctionId});
@@ -90,6 +111,15 @@ function stop(){
 
 async function start(cfg){
   Object.assign(state, cfg||{});
+  // Plate gating: if user provided a list, ensure current page matches
+  try{
+    const pagePlate = detectPlate();
+    if(Array.isArray(state.plates) && state.plates.length>0){
+      if(!pagePlate){ ui({status:'No plate detected on page; idle'}); state.enabled=false; return; }
+      const listed = state.plates.map(p=>String(p).trim().toUpperCase());
+      if(!listed.includes(pagePlate.toUpperCase())){ ui({status:`Plate ${pagePlate} not in list; idle`}); state.enabled=false; return; }
+    }
+  }catch(e){}
   state.enabled = true;
   ui({status:`Running ${state.mode}`});
   loop();
@@ -128,24 +158,34 @@ function loop(){
   if(state.lastSeenJson) scanJson(state.lastSeenJson);
   const wait = +state.refresh || 1500;
 
-  if(state.mode==='classic'){
-    const ms = msUntilEnd();
-    if(ms !== null){
-      if(ms <= 1200 && ms > 200){
-        scheduleAt(ms - 180, ()=>{
-          const target = Math.max(state.bestBid, 0) + 10;
+  const ms = msUntilEnd();
+  if(ms !== null){
+    if(state.mode==='closed'){
+      const offset = 2000; // 2 seconds
+      const guard = 400;   // when to start precision scheduling
+      const fudge = 50;    // fire ~50ms before target to account for latency
+      if(ms > offset + guard){
+        scheduleAt(Math.min(wait, ms - (offset + guard)), loop);
+        return;
+      } else if(ms > fudge){
+        scheduleAt(Math.max(0, ms - offset + fudge), ()=>{
+          const target = (state.bestBid||0) + (state.increment||10);
           placeBid(target);
           scheduleAt(800, loop);
         });
         return;
       }
-    }
-  }else if(state.mode==='closed'){
-    const ms = msUntilEnd();
-    if(ms !== null){
-      if(ms <= 2100 && ms > 400){
-        scheduleAt(ms - 400, ()=>{
-          const target = (state.bestBid||0) + (state.increment||10);
+    } else if(state.mode==='classic'){
+      const offset = 1000; // 1 second
+      const guard = 400;
+      const fudge = 50;
+      if(ms > offset + guard){
+        scheduleAt(Math.min(wait, ms - (offset + guard)), loop);
+        return;
+      } else if(ms > fudge){
+        scheduleAt(Math.max(0, ms - offset + fudge), ()=>{
+          const step = +state.classicStep || 150;
+          const target = (state.bestBid||0) + step;
           placeBid(target);
           scheduleAt(800, loop);
         });
@@ -154,6 +194,16 @@ function loop(){
     }
   }
   scheduleAt(wait, loop);
+}
+
+function detectPlate(){
+  try{
+    const rx = /\b([A-Z]{2})\s?(\d{3})\s?([A-Z]{2})\b/; // e.g., EK128JW or EK 128 JW
+    const txt = (document.querySelector('[data-plate]')?.textContent || document.body.innerText || '').toUpperCase();
+    const m = txt.match(rx);
+    if(m) return `${m[1]}${m[2]}${m[3]}`;
+  }catch(e){}
+  return null;
 }
 
 async function autoLogin(creds){

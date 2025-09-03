@@ -16,10 +16,13 @@
     <section class="grid">
       <label>Email<input id="email" type="email" placeholder="user@example.com"></label>
       <label>Password<input id="password" type="password" placeholder="••••••••"></label>
-      <label>License Plate<input id="plate" placeholder="e.g., EK128JW"></label>
+      <label style="grid-column:1/-1">License Plates
+        <textarea id="plates" placeholder="EK128JW, AB123CD, ... (comma/space/newline separated)" rows="2"></textarea>
+      </label>
       <label>Refresh (ms)<input id="refresh" type="number" min="300" step="100" value="1500"></label>
       <label>Closed Increment (€)<input id="increment" type="number" min="1" step="1" value="10"></label>
       <label>Max Bid (€)<input id="maxBid" type="number" min="0" step="10" value="0"></label>
+      <label>Classic Step (€)<input id="classicStep" type="number" min="50" step="10" value="150"></label>
       <div class="row">
         <label class="radio"><input type="radio" name="mode" value="closed" checked> Closed Envelope</label>
         <label class="radio"><input type="radio" name="mode" value="classic"> Classic</label>
@@ -29,7 +32,8 @@
     <section class="controls">
       <button id="save">Save</button>
       <button id="autologin">Auto Login</button>
-      <button id="start">Start</button>
+      <button id="start">Start (This Tab)</button>
+      <button id="startAll">Start All</button>
       <button id="stop" class="danger">Stop</button>
     </section>
 
@@ -38,6 +42,7 @@
       <div><b>Auction:</b> <span id="auctionId">—</span></div>
       <div><b>Ends:</b> <span id="endTime">—</span></div>
       <div><b>Best Bid:</b> <span id="bestBid">—</span></div>
+      <div><b>Best Bid Time:</b> <span id="bestBidTime">—</span></div>
       <div><b>My Last:</b> <span id="myBid">—</span></div>
     </section>
   </div>

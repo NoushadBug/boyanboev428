@@ -7,6 +7,7 @@ h1{font-size:18px;margin:0}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .grid>label{display:flex;flex-direction:column;font-weight:600;color:#c1c6ff}
 .grid input{margin-top:4px;padding:8px;border-radius:10px;border:1px solid #2d3358;background:#141832;color:#e6e9ff;outline:none}
+.grid textarea{margin-top:4px;padding:8px;border-radius:10px;border:1px solid #2d3358;background:#141832;color:#e6e9ff;outline:none;resize:vertical}
 .grid input:focus{border-color:#5560ff;box-shadow:0 0 0 2px rgba(85,96,255,0.25)}
 
 .row{grid-column:1/-1;display:flex;gap:14px;align-items:center;margin-top:6px}
