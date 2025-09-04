@@ -25,6 +25,28 @@ const state = {
   timer: null
 };
 
+// Centralized selectors for site DOM (easy to maintain)
+const SELECTORS = {
+  // Search page tab state
+  searchTabActive: '[class*=SearchVehiclePanel_tabs-header__] [aria-selected="true"][role="tab"]',
+
+  // Vehicle card structure
+  cardFavouriteIcon: '[class*="VehicleCard_favouriteIcon__"]',
+  cardUpper: '[class*="VehicleCard_upperCard__"]',
+  cardPlate: '[class*="VehicleCard_licensePlate__"] [class*="VehicleCard_detailsLabel__"]',
+
+  // Plate detection fallback on arbitrary pages
+  plateDataAttr: '[data-plate]',
+
+  // Login page (MUI-based)
+  loginInputs: '.MuiFormControl-root input',
+  loginStaySwitch: '.MuiSwitch-root',
+  loginSubmitBtn: 'button[id=":r0:"]',
+
+  // Builder for locale-specific login link presence on Favorites
+  loginLink: (locale)=>`[href="/${locale}/login"], [href="https://business.carbacar.it/${locale}/login"]`
+};
+
 function ui(p){ chrome.runtime.sendMessage({type:'UI', ...p}); }
 
 function pickTimeField(obj){
@@ -209,7 +231,7 @@ function loop(){
 function detectPlate(){
   try{
     const rx = /\b([A-Z]{2})\s?(\d{3})\s?([A-Z]{2})\b/; // e.g., EK128JW or EK 128 JW
-    const txt = (document.querySelector('[data-plate]')?.textContent || document.body.innerText || '').toUpperCase();
+    const txt = (document.querySelector(SELECTORS.plateDataAttr)?.textContent || document.body.innerText || '').toUpperCase();
     const m = txt.match(rx);
     if(m) return `${m[1]}${m[2]}${m[3]}`;
   }catch(e){}
@@ -301,8 +323,8 @@ function markLoginChecked(){
       }
 
       // Wait for MUI inputs, then fill using exact selectors
-      await waitFor('.MuiFormControl-root input');
-      const inputs = document.querySelectorAll('.MuiFormControl-root input');
+      await waitFor(SELECTORS.loginInputs);
+      const inputs = document.querySelectorAll(SELECTORS.loginInputs);
       if(inputs[0]){
         inputs[0].focus();
         inputs[0].value = email;
@@ -317,11 +339,11 @@ function markLoginChecked(){
       }
 
       // Stay logged in switch
-      try{ document.querySelectorAll('.MuiSwitch-root')[0]?.click(); }catch{}
+      try{ document.querySelectorAll(SELECTORS.loginStaySwitch)[0]?.click(); }catch{}
 
       // Submit button using exact selector
-      await waitFor('button[id=":r0:"]');
-      const btn = document.querySelectorAll('button[id=":r0:"]')[0];
+      await waitFor(SELECTORS.loginSubmitBtn);
+      const btn = document.querySelectorAll(SELECTORS.loginSubmitBtn)[0];
       if(btn) btn.click();
 
       // Wait 8 seconds to allow login to complete, then mark and go to search page
@@ -338,7 +360,7 @@ function markLoginChecked(){
 
   function checkFavoritesForLogin(){
     // Look for element with href pointing to locale-specific login
-    const link = document.querySelector(`[href="/${LOCALE}/login"], [href="https://business.carbacar.it/${LOCALE}/login"]`);
+    const link = document.querySelector(SELECTORS.loginLink(LOCALE));
     return !!link;
   }
 
@@ -625,7 +647,7 @@ function markLoginChecked(){
 
     function selectedSearchTab(){
       try{
-        const el = document.querySelector('[class*=SearchVehiclePanel_tabs-header__] [aria-selected="true"][role="tab"]');
+        const el = document.querySelector(SELECTORS.searchTabActive);
         if(!el) return null;
         const txt = el.textContent.replace(/[^a-zA-Z ]/g," ").trim();
         const lower = txt.toLowerCase();
@@ -648,8 +670,8 @@ function markLoginChecked(){
 
     function extractPlateFrom(btn){
       try{
-        const upper = btn.closest('[class*="VehicleCard_upperCard__"]');
-        const label = upper?.querySelector('[class*="VehicleCard_licensePlate__"] [class*="VehicleCard_detailsLabel__"]');
+        const upper = btn.closest(SELECTORS.cardUpper);
+        const label = upper?.querySelector(SELECTORS.cardPlate);
         const txt = (label?.textContent||'').trim();
         return txt.toUpperCase().replace(/\s+/g,'');
       }catch{return ''}
@@ -689,7 +711,7 @@ function markLoginChecked(){
     }
 
     function scan(){
-      document.querySelectorAll('[class*="VehicleCard_favouriteIcon__"]').forEach(enhanceOnce);
+      document.querySelectorAll(SELECTORS.cardFavouriteIcon).forEach(enhanceOnce);
     }
 
     // Initial and observe mutations for dynamic lists
