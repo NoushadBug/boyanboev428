@@ -16,9 +16,6 @@
     <section class="grid">
       <label>Email<input id="email" type="email" placeholder="user@example.com"></label>
       <label>Password<input id="password" type="password" placeholder="••••••••"></label>
-      <label style="grid-column:1/-1">License Plates
-        <textarea id="plates" placeholder="EK128JW, AB123CD, ... (comma/space/newline separated)" rows="2"></textarea>
-      </label>
       <label>Refresh (ms)<input id="refresh" type="number" min="300" step="100" value="1500"></label>
       <label>Closed Increment (€)<input id="increment" type="number" min="1" step="1" value="10"></label>
       <label>Max Bid (€)<input id="maxBid" type="number" min="0" step="10" value="0"></label>
@@ -26,6 +23,31 @@
       <div class="row">
         <label class="radio"><input type="radio" name="mode" value="closed" checked> Closed Envelope</label>
         <label class="radio"><input type="radio" name="mode" value="classic"> Classic</label>
+      </div>
+    </section>
+
+    <section class="lists">
+      <div class="lists-header">
+        <div class="tabs">
+          <button class="list-tab active" data-kind="classic">Classic</button>
+          <button class="list-tab" data-kind="envelope">Closed Envelope</button>
+        </div>
+      </div>
+      <div class="list-body" data-panel="classic">
+        <div class="list-row">
+          <input class="list-input" id="plate-input-classic" placeholder="Add license plate (e.g., EK128JW)">
+          <button class="list-add" data-kind="classic">Add</button>
+        </div>
+        <div class="list-chips" id="chips-classic"></div>
+        <button class="list-start" id="start-classic-local">Start Processing Classic Bids</button>
+      </div>
+      <div class="list-body hidden" data-panel="envelope">
+        <div class="list-row">
+          <input class="list-input" id="plate-input-envelope" placeholder="Add license plate (e.g., EK128JW)">
+          <button class="list-add" data-kind="envelope">Add</button>
+        </div>
+        <div class="list-chips" id="chips-envelope"></div>
+        <button class="list-start" id="start-envelope-local">Start Processing Closed Envelop Bids</button>
       </div>
     </section>
 

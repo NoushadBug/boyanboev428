@@ -389,3 +389,314 @@ function markLoginChecked(){
     runAutoLoginIfArmed();
   });
 })();
+
+// ===== Floating Menu on Search (/cerca) =====
+(function setupFloatingMenu(){
+  try{
+    const path = location.pathname || '';
+    // Show only on https://business.carbacar.it/{locale}/cerca
+    const isSearch = /\/([a-z]{2})\/cerca$/.test(path) || path.endsWith('/cerca');
+    if(!isSearch) return;
+
+    const STYLES = `
+      .ccb-float{position:fixed;bottom: 20px;left: 15.7%;transform:translateX(-50%);z-index:2147483000;background:#0f1220;color:#e6e9ff;border:1px solid #2d3358;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.35);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
+      .ccb-float header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #2d3358}
+      .ccb-close{background:transparent;border:0;color:#9aa5ff;font-size:18px;cursor:pointer}
+      .ccb-body{padding:10px 12px}
+      .ccb-row{display:flex;gap:8px;align-items:center;margin:8px 0}
+      .ccb-input{flex:1;padding:8px;border-radius:10px;border:1px solid #2d3358;background:#141832;color:#e6e9ff;outline:none}
+      .ccb-btn{padding:10px 12px;border-radius:10px;border:1px solid #2d3358;background:#1a1f3d;color:#eef1ff;font-weight:700;cursor:pointer}
+      .ccb-btn.primary{background:#2a3170;border-color:#4851c7}
+      .ccb-btn.full{width:100%}
+      .ccb-buttons{display:flex;flex-direction:column;gap:10px}
+      .ccb-list{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+      .ccb-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 8px;border-radius:999px;background:#141832;border:1px solid #2d3358}
+      .ccb-chip button{border:0;background:transparent;color:#9aa5ff;cursor:pointer}
+      .ccb-accordion{margin-top:10px;border-top:1px solid #2d3358}
+      .ccb-acc-header{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:10px 0;color:#cbd5ff}
+      .ccb-acc-header .arrow{transition:transform .2s ease}
+      .ccb-acc-header.open .arrow{transform:rotate(90deg)}
+      .ccb-acc-body{display:none;padding:10px 0;border-top:1px solid #2d3358}
+      .ccb-acc-body.open{display:block}
+      .ccb-section-title{margin:10px 0 6px;font-weight:700;color:#cbd5ff}
+      /* automation button styling on cards */
+      img.automation-btn{cursor:pointer; width:50px; height:50px}
+    `;
+
+    function ensureStyle(){
+      if(document.getElementById('ccb-float-style')) return;
+      const st = document.createElement('style');
+      st.id = 'ccb-float-style';
+      st.textContent = STYLES;
+      document.documentElement.appendChild(st);
+    }
+
+    const KEYS = { classic: 'classicPlates', envelope: 'envelopePlates' };
+
+    async function getLists(){
+      try{ return await chrome.storage.sync.get([KEYS.classic, KEYS.envelope]); }catch{ return {}; }
+    }
+    async function setList(kind, arr){
+      const key = KEYS[kind];
+      const clean = (arr||[]).map(s=>String(s).trim().toUpperCase()).filter(Boolean);
+      try{ await chrome.storage.sync.set({[key]: clean}); }catch{}
+      return clean;
+    }
+
+    function renderChip(plate, kind){
+      const chip = document.createElement('span');
+      chip.className = 'ccb-chip';
+      const txt = document.createElement('span');
+      txt.textContent = plate;
+      const edit = document.createElement('button');
+      edit.title = 'Edit';
+      edit.textContent = '✎';
+      const del = document.createElement('button');
+      del.title = 'Remove';
+      del.textContent = '×';
+      chip.append(txt, edit, del);
+      edit.addEventListener('click', async()=>{
+        const next = (prompt('Edit plate', plate)||'').toUpperCase().replace(/\s+/g,'');
+        if(!next) return;
+        const data = await getLists();
+        const key = KEYS[kind];
+        const list = (data[key]||[]).slice();
+        const idx = list.indexOf(plate);
+        if(idx>=0){ list[idx] = next; await setList(kind, list); chips[kind](); }
+      });
+      del.addEventListener('click', async()=>{
+        const data = await getLists();
+        const key = KEYS[kind];
+        const list = (data[key]||[]).filter(p=>p!==plate);
+        await setList(kind, list); chips[kind]();
+      });
+      return chip;
+    }
+
+    const chips = { classic: ()=>{}, envelope: ()=>{} };
+
+    function buildListSection(kind, title){
+      const section = document.createElement('div');
+      const h = document.createElement('div');
+      h.className = 'ccb-section-title';
+      h.textContent = title;
+      const listEl = document.createElement('div');
+      listEl.className = 'ccb-list';
+      const row = document.createElement('div');
+      row.className = 'ccb-row';
+      const input = document.createElement('input');
+      input.className = 'ccb-input';
+      input.placeholder = 'Add license plate (e.g., EK128JW)';
+      const add = document.createElement('button');
+      add.className = 'ccb-btn';
+      add.textContent = 'Add';
+      row.append(input, add);
+      section.append(h, row, listEl);
+
+      chips[kind] = async()=>{
+        listEl.innerHTML = '';
+        const data = await getLists();
+        const list = (data[KEYS[kind]]||[]);
+        list.forEach(p=> listEl.appendChild(renderChip(p, kind)) );
+      };
+
+      async function handleAdd(){
+        const raw = (input.value||'').toUpperCase().replace(/\s+/g,'');
+        if(!raw) return;
+        const data = await getLists();
+        const list = (data[KEYS[kind]]||[]).slice();
+        raw.split(/[,\n\s]+/).map(s=>s.trim()).filter(Boolean).forEach(v=>{
+          const p = v.toUpperCase();
+          if(!list.includes(p)) list.push(p);
+        });
+        await setList(kind, list);
+        input.value='';
+        chips[kind]();
+      }
+      add.addEventListener('click', handleAdd);
+      input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') handleAdd(); });
+
+      return {section, refresh: chips[kind]};
+    }
+
+    function mount(){
+      ensureStyle();
+      if(document.getElementById('ccb-float')) return; // already
+
+      const wrap = document.createElement('div');
+      wrap.id = 'ccb-float';
+      wrap.className = 'ccb-float';
+
+      const header = document.createElement('header');
+      const title = document.createElement('div');
+      title.textContent = 'Auction Tools';
+      const close = document.createElement('button');
+      close.className = 'ccb-close';
+      close.textContent = '×';
+      header.append(title, close);
+
+      const body = document.createElement('div');
+      body.className = 'ccb-body';
+
+      // Top buttons only
+      const buttonsWrap = document.createElement('div');
+      buttonsWrap.className = 'ccb-buttons';
+      const btnClassic = document.createElement('button');
+      btnClassic.className = 'ccb-btn primary full';
+      btnClassic.textContent = 'Start Processing Classic Bids';
+      const btnEnvelope = document.createElement('button');
+      btnEnvelope.className = 'ccb-btn primary full';
+      btnEnvelope.textContent = 'Start Processing Closed Envelop Bids';
+      buttonsWrap.append(btnClassic, btnEnvelope);
+
+      // Accordion for managing lists
+      const acc = document.createElement('div');
+      acc.className = 'ccb-accordion';
+      const accHeader = document.createElement('div');
+      accHeader.className = 'ccb-acc-header';
+      const accTitle = document.createElement('span');
+      accTitle.textContent = 'Manage License Plates';
+      const accArrow = document.createElement('span');
+      accArrow.className = 'arrow';
+      accArrow.textContent = '▶';
+      accHeader.append(accTitle, accArrow);
+      const accBody = document.createElement('div');
+      accBody.className = 'ccb-acc-body';
+
+      const classic = buildListSection('classic','Classic Auction');
+      const envelope = buildListSection('envelope','Closed Envelope');
+      accBody.append(classic.section, envelope.section);
+
+      accHeader.addEventListener('click', ()=>{
+        const open = !accBody.classList.contains('open');
+        accBody.classList.toggle('open', open);
+        accHeader.classList.toggle('open', open);
+      });
+      close.addEventListener('click', ()=> wrap.remove());
+
+      acc.append(accHeader, accBody);
+      body.append(buttonsWrap, acc);
+      wrap.append(header, body);
+      document.body.appendChild(wrap);
+
+      // Wire start buttons to run the automation with stored config
+      async function runWithMode(mode){
+        const store = await chrome.storage.sync.get([KEYS.classic, KEYS.envelope, 'refresh','increment','classicStep','maxBid']);
+        const plates = mode==='classic' ? (store[KEYS.classic]||[]) : (store[KEYS.envelope]||[]);
+        start({
+          mode,
+          plates,
+          refresh: +(store.refresh||1500),
+          increment: +(store.increment||10),
+          classicStep: +(store.classicStep||150),
+          maxBid: +(store.maxBid||0)
+        });
+      }
+      btnClassic.addEventListener('click', ()=> runWithMode('classic'));
+      btnEnvelope.addEventListener('click', ()=> runWithMode('closed'));
+
+      // Load list data for accordion
+      classic.refresh();
+      envelope.refresh();
+
+      // React to external updates (e.g., card automation button adds)
+      document.addEventListener('ccb-lists-updated', (ev)=>{
+        const kind = ev.detail?.kind;
+        if(kind==='classic') classic.refresh();
+        if(kind==='envelope') envelope.refresh();
+      });
+    }
+
+    if(document.readyState==='complete' || document.readyState==='interactive'){
+      mount();
+    }else{
+      document.addEventListener('DOMContentLoaded', mount, {once:true});
+    }
+  }catch(e){ /* ignore UI errors */ }
+})();
+
+// ===== Automation Button on Vehicle Cards =====
+(function setupAutomationButtons(){
+  try{
+    const ORIG_ICON_SRC = 'https://cdn.iconscout.com/icon/free/png-256/free-automation-icon-svg-png-download-3709992.png';
+    const OK_ICON_SRC = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Eo_circle_green_white_checkmark.svg/768px-Eo_circle_green_white_checkmark.svg.png';
+
+    const KEYS = { classic: 'classicPlates', envelope: 'envelopePlates' };
+
+    function selectedSearchTab(){
+      try{
+        const el = document.querySelector('[class*=SearchVehiclePanel_tabs-header__] [aria-selected="true"][role="tab"]');
+        if(!el) return null;
+        const txt = el.textContent.replace(/[^a-zA-Z ]/g," ").trim();
+        const lower = txt.toLowerCase();
+        if(lower === 'classic auction' || lower.includes('classic')) return 'classic';
+        if(lower === 'closed envelope' || lower.includes('closed')) return 'envelope';
+        return null;
+      }catch{ return null; }
+    }
+
+    async function addPlate(kind, plate){
+      const store = await chrome.storage.sync.get([KEYS.classic, KEYS.envelope]);
+      const key = KEYS[kind];
+      const list = (store[key]||[]).slice();
+      const norm = String(plate||'').toUpperCase().replace(/\s+/g,'');
+      if(!norm) return false;
+      if(!list.includes(norm)) list.push(norm);
+      await chrome.storage.sync.set({[key]: list});
+      return true;
+    }
+
+    function extractPlateFrom(btn){
+      try{
+        const upper = btn.closest('[class*="VehicleCard_upperCard__"]');
+        const label = upper?.querySelector('[class*="VehicleCard_licensePlate__"] [class*="VehicleCard_detailsLabel__"]');
+        const txt = (label?.textContent||'').trim();
+        return txt.toUpperCase().replace(/\s+/g,'');
+      }catch{return ''}
+    }
+
+    function handleClick(img){
+      return async()=>{
+        const plate = extractPlateFrom(img);
+        const kind = selectedSearchTab();
+        if(!plate || !kind){
+          try{
+            img.title = !plate ? 'Plate not found on card' : 'Cannot detect search tab';
+          }catch{}
+          return;
+        }
+        const ok = await addPlate(kind, plate);
+        if(ok){
+          const original = img.getAttribute('src') || ORIG_ICON_SRC;
+          img.setAttribute('data-orig-src', original);
+          img.src = OK_ICON_SRC;
+          setTimeout(()=>{ img.src = img.getAttribute('data-orig-src') || ORIG_ICON_SRC; }, 2000);
+          try{ document.dispatchEvent(new CustomEvent('ccb-lists-updated', {detail:{kind}})); }catch{}
+        }
+      };
+    }
+
+    function enhanceOnce(icon){
+      if(icon.dataset.ccbEnhanced === '1') return;
+      icon.dataset.ccbEnhanced = '1';
+      const img = document.createElement('img');
+      img.className = 'automation-btn';
+      img.src = ORIG_ICON_SRC;
+      img.title = 'Add For Automation';
+      img.style.marginLeft = '6px';
+      img.addEventListener('click', handleClick(img));
+      icon.insertAdjacentElement('afterend', img);
+    }
+
+    function scan(){
+      document.querySelectorAll('[class*="VehicleCard_favouriteIcon__"]').forEach(enhanceOnce);
+    }
+
+    // Initial and observe mutations for dynamic lists
+    if(document.readyState==='complete' || document.readyState==='interactive') scan();
+    else document.addEventListener('DOMContentLoaded', scan, {once:true});
+
+    const mo = new MutationObserver(()=> scan());
+    mo.observe(document.documentElement, {childList:true, subtree:true});
+  }catch(e){ /* swallow */ }
+})();

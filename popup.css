@@ -1,5 +1,5 @@
 *{box-sizing:border-box} body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,Arial;background:#0f1220;color:#e6e9ff}
-.wrap{width:360px;padding:14px}
+.wrap{width:480px;padding:14px}
 header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 h1{font-size:18px;margin:0}
 .badge{padding:3px 8px;border-radius:10px;background:#2b2f48;color:#cbd5ff;font-weight:600}
@@ -20,3 +20,19 @@ button.danger{background:#3d1a1a;border-color:#5a2b2b}
 
 .telemetry{display:grid;gap:6px;background:#0c1024;padding:10px;border:1px solid #2d3358;border-radius:12px}
 .telemetry b{color:#9aa5ff}
+
+/* Lists (Classic / Closed Envelope) */
+.lists{margin:12px 0;padding:10px;border:1px solid #2d3358;border-radius:12px;background:#0c1024}
+.lists-header{display:flex;align-items:center;justify-content:flex-start;margin-bottom:8px}
+.tabs{display:flex;gap:8px}
+.list-tab{padding:6px 10px;border-radius:10px;border:1px solid #2d3358;background:#141832;color:#cbd5ff;font-weight:700;cursor:pointer}
+.list-tab.active{background:#1a1f3d;color:#eef1ff;border-color:#5560ff}
+.list-body{padding:2px 0}
+.hidden{display:none}
+.list-row{display:flex;gap:8px;align-items:center;margin:8px 0}
+.list-input{flex:1;padding:8px;border-radius:10px;border:1px solid #2d3358;background:#141832;color:#e6e9ff;outline:none}
+.list-add{padding:8px 10px;border-radius:10px;border:1px solid #2d3358;background:#1a1f3d;color:#eef1ff;font-weight:700;cursor:pointer}
+.list-chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 8px;border-radius:999px;background:#141832;border:1px solid #2d3358}
+.chip button{border:0;background:transparent;color:#9aa5ff;cursor:pointer}
+.list-start{width:100%;margin-top:6px;padding:10px 12px;border-radius:12px;border:1px solid #2d3358;background:#1a1f3d;color:#eef1ff;font-weight:700;cursor:pointer}
