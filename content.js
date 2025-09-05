@@ -47,7 +47,13 @@ const SELECTORS = {
   loginLink: (locale) => `[href="/${locale}/login"], [href="https://business.carbacar.it/${locale}/login"]`
 };
 
-function ui(p) { chrome.runtime.sendMessage({ type: 'UI', ...p }); }
+function ui(p) {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+      chrome.runtime.sendMessage({ type: 'UI', ...p });
+    }
+  } catch (e) { /* ignore context invalidation */ }
+}
 
 function pickTimeField(obj) {
   const keys = Object.keys(obj || {});
