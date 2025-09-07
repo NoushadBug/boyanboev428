@@ -94,27 +94,7 @@ qs('#autologin').addEventListener('click', async()=>{
   chrome.tabs.sendMessage(tab.id, {type:'AUTO_LOGIN', creds:{email,password}});
 });
 
-qs('#start').addEventListener('click', async()=>{
-  const mode = getMode();
-  const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
-  const store = await chrome.storage.sync.get([KEYS.classic, KEYS.envelope, 'refresh','increment','classicStep','maxBid']);
-  const list = mode==='classic' ? (store[KEYS.classic]||[]) : (store[KEYS.envelope]||[]);
-  chrome.tabs.sendMessage(tab.id, {type:'START', config:{
-    mode,
-    plates: list,
-    refresh: +(store.refresh||1500),
-    increment: +(store.increment||10),
-    classicStep: +(store.classicStep||150),
-    maxBid: +(store.maxBid||0)
-  }});
-  updateBadge('running');
-});
 
-qs('#stop').addEventListener('click', async()=>{
-  const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
-  chrome.tabs.sendMessage(tab.id, {type:'STOP'});
-  updateBadge('idle');
-});
 
 chrome.runtime.onMessage.addListener((msg)=>{
   if(msg.type==='UI'){
@@ -125,25 +105,6 @@ chrome.runtime.onMessage.addListener((msg)=>{
     if(msg.bestBidTime) document.querySelector('#bestBidTime').textContent = msg.bestBidTime;
     if(msg.myBid!==undefined) document.querySelector('#myBid').textContent = msg.myBid;
   }
-});
-
-// Start All: broadcast to all matching tabs in this window
-qs('#startAll').addEventListener('click', async()=>{
-  const mode = getMode();
-  const store = await chrome.storage.sync.get([KEYS.classic, KEYS.envelope, 'refresh','increment','classicStep','maxBid']);
-  const list = mode==='classic' ? (store[KEYS.classic]||[]) : (store[KEYS.envelope]||[]);
-  const tabs = await chrome.tabs.query({currentWindow:true, url: ['https://business.carbacar.it/*']});
-  for(const tab of tabs){
-    chrome.tabs.sendMessage(tab.id, {type:'START', config:{
-      mode,
-      plates: list,
-      refresh: +(store.refresh||1500),
-      increment: +(store.increment||10),
-      classicStep: +(store.classicStep||150),
-      maxBid: +(store.maxBid||0)
-    }});
-  }
-  updateBadge('running');
 });
 
 // Tab switching

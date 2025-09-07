@@ -453,7 +453,7 @@ function markLoginChecked() {
       .ccb-acc-body.open{display:block}
       .ccb-section-title{margin:10px 0 6px;font-weight:700;color:#cbd5ff}
       /* automation button styling on cards */
-      img.automation-btn{cursor:pointer; width:50px; height:50px}
+      img.automation-btn{cursor:pointer; width:50px}
     `;
 
     function ensureStyle() {
@@ -614,8 +614,31 @@ function markLoginChecked() {
 
       // Wire start buttons to run the automation with stored config
       async function runWithMode(mode) {
-        const store = await chrome.storage.sync.get([KEYS.classic, KEYS.envelope, 'refresh', 'increment', 'classicStep', 'maxBid']);
-        const plates = mode === 'classic' ? (store[KEYS.classic] || []) : (store[KEYS.envelope] || []);
+        const store = await chrome.storage.sync.get([
+          KEYS.classic,
+          KEYS.envelope,
+          'refresh',
+          'increment',
+          'classicStep',
+          'maxBid'
+        ]);
+
+        const plates = mode === 'classic'
+          ? (store[KEYS.classic] || [])
+          : (store[KEYS.envelope] || []);
+
+        console.log("Plates to open:", plates);
+
+        // Open one tab per plate with query param
+        plates.forEach((plate) => {
+          const newUrl = `${window.location.origin}${window.location.pathname}?plate=${encodeURIComponent(plate)}`;
+          chrome.runtime.sendMessage({
+            action: "openTab",
+            url: newUrl
+          });
+        });
+
+        // Keep your start() logic
         start({
           mode,
           plates,
@@ -625,6 +648,9 @@ function markLoginChecked() {
           maxBid: +(store.maxBid || 0)
         });
       }
+
+
+
       btnClassic.addEventListener('click', () => runWithMode('classic'));
       btnEnvelope.addEventListener('click', () => runWithMode('closed'));
 
@@ -647,6 +673,46 @@ function markLoginChecked() {
     }
   } catch (e) { /* ignore UI errors */ }
 })();
+
+(function() {
+  // helper: wait for element
+  function waitForSelector(selector, timeout = 5000) {
+    return new Promise((resolve, reject) => {
+      const interval = 100;
+      let elapsed = 0;
+
+      const timer = setInterval(() => {
+        const el = document.querySelector(selector);
+        if (el) {
+          clearInterval(timer);
+          resolve(el);
+        }
+        elapsed += interval;
+        if (elapsed >= timeout) {
+          clearInterval(timer);
+          reject(`Timeout waiting for ${selector}`);
+        }
+      }, interval);
+    });
+  }
+
+  async function autoClickCard() {
+    const params = new URLSearchParams(window.location.search);
+    const plate = params.get("plate");
+    if (!plate) return; // only run if a plate param exists
+
+    try {
+      const card = await waitForSelector(".VehicleCard_infoContainer__9bIyD", 8000);
+      console.log("Clicking vehicle card for:", plate);
+      card.click();
+    } catch (err) {
+      console.warn("No card found for plate:", plate, err);
+    }
+  }
+
+  window.addEventListener("load", autoClickCard);
+})();
+
 
 // ===== Automation Button on Vehicle Cards =====
 (function setupAutomationButtons() {
