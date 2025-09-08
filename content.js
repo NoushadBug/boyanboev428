@@ -116,20 +116,132 @@ function maybeCaptureBid(url, method, bodyObj) {
   }
 }
 
-window.addEventListener('message', (ev) => {
+// Helper: wait for an element to exist in the DOM
+function waitForElement(selector, timeout = 10000) {
+  return new Promise((resolve, reject) => {
+    const interval = 100;
+    let elapsed = 0;
+
+    const timer = setInterval(() => {
+      const el = document.querySelector(selector);
+      if (el) {
+        clearInterval(timer);
+        resolve(el);
+      }
+      elapsed += interval;
+      if (elapsed >= timeout) {
+        clearInterval(timer);
+        reject(`Timeout waiting for ${selector}`);
+      }
+    }, interval);
+  });
+}
+
+window.addEventListener("message", (ev) => {
   const d = ev.data || {};
-  if (d.source !== 'carbacar-bridge') return;
-  if (d.name === 'fetch' || d.name === 'xhr') {
-    const { url, method, body, json } = d.payload || {};
+  if (d.source !== "carbacar-bridge") return;
+
+  if (d.name === "fetch" || d.name === "xhr") {
+    const { url, json } = d.payload || {};
+
+    // ✅ Ensure state exists
+    if (!window.state) window.state = {};
     state.lastSeenJson = json;
-    scanJson(json);
-    let bodyObj = null;
-    try { bodyObj = typeof body === 'string' ? JSON.parse(body) : body; } catch { }
-    maybeCaptureBid(url, method, bodyObj);
-  } else if (d.name === 'bid-result') {
-    ui({ status: d.payload?.ok ? 'Bid OK' : 'Bid Failed' });
+
+    // ✅ Only call scanJson if it exists
+    if (typeof scanJson === "function") {
+      try { scanJson(json); } catch (err) {
+        console.warn("scanJson error:", err);
+      }
+    }
+
+    try {
+      if (typeof url === "string" && /getAuctionsByList/i.test(url)) {
+        const { max, when } = highestBetFromAuctions(json);
+        if (max !== null) {
+          const bidValue = max + 10; // Add 10 to highest bid
+
+          // Wait for the input element before setting the value
+          waitForElement("input.MuiInputBase-input", 5000)
+            .then((input) => {
+              setInputValue(input, bidValue);
+              console.log(
+                `🔥 Highest bid ${max} + 10 = ${bidValue} filled into bid input`,
+                when ? `(at ${new Date(when).toLocaleString()})` : ""
+              );
+            })
+            .catch(() => console.warn("⚠️ Bid input not found in time"));
+        } else {
+          console.log("ℹ️ No bets found in getAuctionsByList response.");
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to compute highest bid:", e);
+    }
   }
 });
+
+function setInputValue(element, newValue) {
+  if (!element) {
+    console.warn("⚠️ No element provided to setInputValue");
+    return;
+  }
+
+  // Focus element without scrolling
+  element.focus({ preventScroll: true });
+
+  // Select existing content and insert new value
+  setTimeout(() => {
+    document.execCommand("selectAll", false, undefined);
+
+    setTimeout(() => {
+      document.execCommand("insertText", false, String(newValue));
+
+      // Fire React/MUI-friendly events
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+      element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      element.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true }));
+    }, 250);
+  }, 250);
+}
+
+
+function highestBetFromAuctions(resp) {
+  const items = Array.isArray(resp?.data) ? resp.data : [];
+  let max = -Infinity;
+  let when = null;
+
+  const pickNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  for (const item of items) {
+    // regular bets
+    for (const b of (item?.bets || [])) {
+      const p = pickNum(b?.price);
+      if (p !== null && p > max) {
+        max = p;
+        when = b?.timeStamp || null;
+      }
+    }
+
+    // automatic bets
+    for (const b of (item?.automaticBets || [])) {
+      const p = pickNum(b?.price);
+      if (p !== null && p > max) {
+        max = p;
+        when = b?.timeStamp || null;
+      }
+    }
+  }
+
+  return {
+    max: (max === -Infinity) ? null : max,
+    when
+  };
+}
 
 function stop() {
   state.enabled = false;
@@ -432,7 +544,7 @@ function markLoginChecked() {
     if (!isSearch) return;
 
     const STYLES = `
-      .ccb-float{position:fixed;bottom: 20px;left: 15.7%;transform:translateX(-50%);z-index:2147483000;background:#0f1220;color:#e6e9ff;border:1px solid #2d3358;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.35);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
+      .ccb-float{position:fixed;bottom: 20px; width: 450px; left: 15.7%;transform:translateX(-50%);z-index:2147483000;background:#0f1220;color:#e6e9ff;border:1px solid #2d3358;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.35);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
       .ccb-float header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #2d3358}
       .ccb-close{background:transparent;border:0;color:#9aa5ff;font-size:18px;cursor:pointer}
       .ccb-body{padding:10px 12px}
@@ -676,7 +788,7 @@ function markLoginChecked() {
 
 (function() {
   // helper: wait for element
-  function waitForSelector(selector, timeout = 5000) {
+  function waitForSelector(selector, timeout = 50000) {
     return new Promise((resolve, reject) => {
       const interval = 100;
       let elapsed = 0;
@@ -702,7 +814,7 @@ function markLoginChecked() {
     if (!plate) return; // only run if a plate param exists
 
     try {
-      const card = await waitForSelector(".VehicleCard_infoContainer__9bIyD", 8000);
+      const card = await waitForSelector(".VehicleCard_infoContainer__9bIyD", 50000);
       console.log("Clicking vehicle card for:", plate);
       card.click();
     } catch (err) {
@@ -712,6 +824,7 @@ function markLoginChecked() {
 
   window.addEventListener("load", autoClickCard);
 })();
+
 
 
 // ===== Automation Button on Vehicle Cards =====
@@ -764,16 +877,19 @@ function markLoginChecked() {
           } catch { }
           return;
         }
+
         const ok = await addPlate(kind, plate);
         if (ok) {
-          const original = img.getAttribute('src') || ORIG_ICON_SRC;
-          img.setAttribute('data-orig-src', original);
+          // Keep icon permanent after success
           img.src = OK_ICON_SRC;
-          setTimeout(() => { img.src = img.getAttribute('data-orig-src') || ORIG_ICON_SRC; }, 2000);
-          try { document.dispatchEvent(new CustomEvent('ccb-lists-updated', { detail: { kind } })); } catch { }
+          img.title = 'Added for Automation';
+          try { 
+            document.dispatchEvent(new CustomEvent('ccb-lists-updated', { detail: { kind } })); 
+          } catch { }
         }
       };
     }
+
 
     function enhanceOnce(icon) {
       if (icon.dataset.ccbEnhanced === '1') return;

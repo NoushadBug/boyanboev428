@@ -28,19 +28,53 @@ function chip(plate, kind){
   edit.title = 'Edit'; edit.textContent = '✎';
   const del = document.createElement('button');
   del.title = 'Remove'; del.textContent = '×';
-  edit.addEventListener('click', async()=>{
-    const next = (prompt('Edit plate', plate)||'').toUpperCase().replace(/\s+/g,'');
-    if(!next) return;
+  edit.addEventListener('click', async () => {
+    const next = (prompt('Edit plate', plate) || '').toUpperCase().replace(/\s+/g, '');
+    if (!next) return;
+
     const store = await getLists();
-    const list = (store[KEYS[kind]]||[]).slice();
+    const list = (store[KEYS[kind]] || []).slice();
     const idx = list.indexOf(plate);
-    if(idx>=0){ list[idx] = next; await setList(kind, list); render(kind); }
+    if (idx >= 0) {
+      list[idx] = next;
+      await setList(kind, list);
+      render(kind);
+
+      // Update content.js chip
+        chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+          chrome.scripting.executeScript({
+            target: { tabId: tabs[0].id },
+            func: (oldPlate, newPlate) => {
+              const chipSpan = Array.from(document.querySelectorAll('.ccb-chip span'))
+                .find(s => s.textContent === oldPlate);
+              if (chipSpan) chipSpan.textContent = newPlate;
+            },
+            args: [plate, next]
+          });
+        });
+    }
   });
-  del.addEventListener('click', async()=>{
+
+  del.addEventListener('click', async () => {
     const store = await getLists();
-    const list = (store[KEYS[kind]]||[]).filter(p=>p!==plate);
-    await setList(kind, list); render(kind);
+    const list = (store[KEYS[kind]] || []).filter(p => p !== plate);
+    await setList(kind, list);
+    render(kind);
+
+    // Remove content.js chip
+    chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+      chrome.scripting.executeScript({
+        target: { tabId: tabs[0].id },
+        func: (plateText) => {
+          const chip = Array.from(document.querySelectorAll('.ccb-chip span'))
+            .find(s => s.textContent === plateText);
+          if (chip && chip.parentElement) chip.parentElement.remove();
+        },
+        args: [plate]
+      });
+    });
   });
+
   el.append(txt, edit, del);
   return el;
 }
