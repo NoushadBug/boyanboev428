@@ -11,10 +11,8 @@ const state = {
   enabled: false,
   mode: 'closed',
   plates: [],
-  refresh: 1500,
   increment: 10,
   classicStep: 150,
-  maxBid: 0,
   auctionId: null,
   endTime: null,
   bestBid: 0,
@@ -143,36 +141,33 @@ window.addEventListener("message", (ev) => {
 
   if (d.name === "fetch" || d.name === "xhr") {
     const { url, json } = d.payload || {};
-
-    state.lastSeenJson = json; // ✅ keep using the same object
-
-    if (typeof scanJson === "function") {
-      try { scanJson(json); } catch (err) {
-        console.warn("scanJson error:", err);
-      }
-    }
+    state.lastSeenJson = json;
 
     try {
       if (typeof url === "string" && /getAuctionsByList/i.test(url)) {
         const { max, when } = highestBetFromAuctions(json);
         if (max !== null) {
-          // ✅ get mode from localStorage
           const mode = localStorage.getItem("carbacar_mode") || "closed";
-          const increment = mode === "classic" ? 150 : 10;
-          const bidValue = max + increment;
 
-          waitForElement("input.MuiInputBase-input", 5000)
-            .then((input) => {
-              setInputValue(input, bidValue);
-              console.log(
-                `🔥 Mode: ${mode} | Highest bid ${max} + ${increment} = ${bidValue} filled into bid input`,
-                when ? `(at ${new Date(when).toLocaleString()})` : ""
-              );
+          // callback-style storage read
+          chrome.storage.sync.get(['classic_increament', 'closed_increament'], (store = {}) => {
+            const classic_increament = Number(store.classic_increament ?? 150);
+            const closed_increament  = Number(store.closed_increament  ?? 10);
 
-              // ✅ reset mode after use
-              localStorage.removeItem("carbacar_mode");
-            })
-            .catch(() => console.warn("⚠️ Bid input not found in time"));
+            const increment = mode === "classic" ? classic_increament : closed_increament;
+            const bidValue = max + increment;
+
+            waitForElement("input.MuiInputBase-input", 5000)
+              .then((input) => {
+                setInputValue(input, bidValue);
+                console.log(
+                  `🔥 Mode: ${mode} | Highest bid ${max} + ${increment} = ${bidValue} filled into bid input`,
+                  when ? `(at ${new Date(when).toLocaleString()})` : ""
+                );
+                localStorage.removeItem("carbacar_mode");
+              })
+              .catch(() => console.warn("⚠️ Bid input not found in time"));
+          });
         } else {
           console.log("ℹ️ No bets found in getAuctionsByList response.");
         }
@@ -182,6 +177,7 @@ window.addEventListener("message", (ev) => {
     }
   }
 });
+
 
 
 
@@ -766,10 +762,8 @@ function markLoginChecked() {
         start({
           mode,
           plates,
-          refresh: +(store.refresh || 1500),
           increment: +(store.increment || 10),
-          classicStep: +(store.classicStep || 150),
-          maxBid: +(store.maxBid || 0)
+          classicStep: +(store.classicStep || 150)
         });
       }
 
@@ -855,15 +849,23 @@ function markLoginChecked() {
 
     const KEYS = { classic: 'classicPlates', envelope: 'envelopePlates' };
 
-    function selectedSearchTab() {
+    function selectedSearchTab(img) {
+      const parentDiv = img.closest('div[class^="VehicleCard_descriptionContainer"]');
+      if (!parentDiv) return null;
       try {
-        const el = document.querySelector(SELECTORS.searchTabActive);
+        const el = parentDiv.querySelector('div[class^="AuctionLabel_component"]');
         if (!el) return null;
-        const txt = el.textContent.replace(/[^a-zA-Z ]/g, " ").trim();
-        const lower = txt.toLowerCase();
-        if (lower === 'classic auction' || lower.includes('classic')) return 'classic';
-        if (lower === 'closed envelope' || lower.includes('closed')) return 'envelope';
-        return null;
+        if (el) {
+            const childDiv = el.querySelector('div[class^="AuctionLabel_"]');
+            
+            if (childDiv) {
+              const txt = childDiv.innerText.replace(/[^a-zA-Z ]/g, " ").trim();
+              const lower = txt.toLowerCase();
+              if (lower === 'classic auction' || lower.includes('classic')) return 'classic';
+              if (lower === 'closed envelope' || lower.includes('closed')) return 'envelope';
+              return null;
+            }
+        }
       } catch { return null; }
     }
 
@@ -890,7 +892,7 @@ function markLoginChecked() {
     function handleClick(img) {
       return async () => {
         const plate = extractPlateFrom(img);
-        const kind = selectedSearchTab();
+        const kind = selectedSearchTab(img);
         if (!plate || !kind) {
           try {
             img.title = !plate ? 'Plate not found on card' : 'Cannot detect search tab';

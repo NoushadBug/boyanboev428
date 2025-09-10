@@ -2,8 +2,11 @@ const qs = s=>document.querySelector(s);
 const qsa = s=>Array.from(document.querySelectorAll(s));
 const badge = qs('#badge');
 const statusEl = qs('#status');
-const fields = ['email','password','refresh','increment','maxBid','classicStep'];
-const getMode = ()=>document.querySelector('input[name="mode"]:checked').value;
+const fields = ['email','password','classic_increament','closed_increament'];
+const getMode = () => {
+  const activeBtn = document.querySelector('.list-tab.active');
+  return activeBtn ? activeBtn.getAttribute('data-kind') : null;
+};
 
 const KEYS = { classic: 'classicPlates', envelope: 'envelopePlates' };
 const chipsEls = { classic: qs('#chips-classic'), envelope: qs('#chips-envelope') };
