@@ -144,11 +144,8 @@ window.addEventListener("message", (ev) => {
   if (d.name === "fetch" || d.name === "xhr") {
     const { url, json } = d.payload || {};
 
-    // ✅ Ensure state exists
-    if (!window.state) window.state = {};
-    state.lastSeenJson = json;
+    state.lastSeenJson = json; // ✅ keep using the same object
 
-    // ✅ Only call scanJson if it exists
     if (typeof scanJson === "function") {
       try { scanJson(json); } catch (err) {
         console.warn("scanJson error:", err);
@@ -159,16 +156,21 @@ window.addEventListener("message", (ev) => {
       if (typeof url === "string" && /getAuctionsByList/i.test(url)) {
         const { max, when } = highestBetFromAuctions(json);
         if (max !== null) {
-          const bidValue = max + 10; // Add 10 to highest bid
+          // ✅ get mode from localStorage
+          const mode = localStorage.getItem("carbacar_mode") || "closed";
+          const increment = mode === "classic" ? 150 : 10;
+          const bidValue = max + increment;
 
-          // Wait for the input element before setting the value
           waitForElement("input.MuiInputBase-input", 5000)
             .then((input) => {
               setInputValue(input, bidValue);
               console.log(
-                `🔥 Highest bid ${max} + 10 = ${bidValue} filled into bid input`,
+                `🔥 Mode: ${mode} | Highest bid ${max} + ${increment} = ${bidValue} filled into bid input`,
                 when ? `(at ${new Date(when).toLocaleString()})` : ""
               );
+
+              // ✅ reset mode after use
+              localStorage.removeItem("carbacar_mode");
             })
             .catch(() => console.warn("⚠️ Bid input not found in time"));
         } else {
@@ -180,6 +182,9 @@ window.addEventListener("message", (ev) => {
     }
   }
 });
+
+
+
 
 function setInputValue(element, newValue) {
   if (!element) {
@@ -686,12 +691,18 @@ function markLoginChecked() {
       // Top buttons only
       const buttonsWrap = document.createElement('div');
       buttonsWrap.className = 'ccb-buttons';
+
       const btnClassic = document.createElement('button');
       btnClassic.className = 'ccb-btn primary full';
       btnClassic.textContent = 'Start Processing Classic Bids';
+      btnClassic.setAttribute('type', 'classic');
+
+
       const btnEnvelope = document.createElement('button');
       btnEnvelope.className = 'ccb-btn primary full';
       btnEnvelope.textContent = 'Start Processing Closed Envelop Bids';
+      btnEnvelope.setAttribute('type', 'closed');
+
       buttonsWrap.append(btnClassic, btnEnvelope);
 
       // Accordion for managing lists
@@ -726,6 +737,7 @@ function markLoginChecked() {
 
       // Wire start buttons to run the automation with stored config
       async function runWithMode(mode) {
+
         const store = await chrome.storage.sync.get([
           KEYS.classic,
           KEYS.envelope,
@@ -763,8 +775,16 @@ function markLoginChecked() {
 
 
 
-      btnClassic.addEventListener('click', () => runWithMode('classic'));
-      btnEnvelope.addEventListener('click', () => runWithMode('closed'));
+      btnClassic.addEventListener('click', () => {
+        localStorage.setItem("carbacar_mode", "classic");
+        runWithMode('classic');
+      });
+
+      btnEnvelope.addEventListener('click', () => {
+        localStorage.setItem("carbacar_mode", "closed");
+        runWithMode('closed');
+      });
+
 
       // Load list data for accordion
       classic.refresh();
