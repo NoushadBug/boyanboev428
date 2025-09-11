@@ -108,7 +108,10 @@ async function addPlate(kind){
 const load = async()=>{
   const data = await chrome.storage.sync.get(fields.concat(['mode', KEYS.classic, KEYS.envelope]));
   fields.forEach(k=>{ if(data[k]!==undefined) qs('#'+k).value = data[k]; });
-  if(data.mode) document.querySelector(`input[name="mode"][value="${data.mode}"]`).checked = true;
+  if (data.mode) {
+    const modeEl = document.querySelector(`input[name="mode"][value="${data.mode}"]`);
+    if (modeEl) modeEl.checked = true;
+  }
   await Promise.all([render('classic'), render('envelope')]);
   updateBadge('idle');
 };
@@ -158,5 +161,28 @@ Object.entries(inputEls).forEach(([kind, input])=>{
 });
 
 // Local start buttons: just alerts (per request)
-qs('#start-classic-local').addEventListener('click', ()=> alert('Start Processing Classic Bids feature is coming'));
-qs('#start-envelope-local').addEventListener('click', ()=> alert('Start Processing Closed Envelop Bids feature is coming'));
+// Classic
+qs('#start-classic-local').addEventListener('click', () => {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    chrome.scripting.executeScript({
+      target: { tabId: tabs[0].id },
+      func: () => {
+        document.querySelector("#ccb-float > div > div.ccb-buttons > button:nth-child(1)")?.click();
+      }
+    });
+  });
+});
+
+// Envelope
+qs('#start-envelope-local').addEventListener('click', () => {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    chrome.scripting.executeScript({
+      target: { tabId: tabs[0].id },
+      func: () => {
+        document.querySelector("#ccb-float > div > div.ccb-buttons > button:nth-child(2)")?.click();
+      }
+    });
+  });
+});
+
+

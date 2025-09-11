@@ -17,6 +17,7 @@ h1{font-size:18px;margin:0}
 button{flex:1;padding:10px 12px;border-radius:12px;border:1px solid #2d3358;background:#1a1f3d;color:#eef1ff;font-weight:700;cursor:pointer;transition:.15s}
 button:hover{transform:translateY(-1px)}
 button.danger{background:#3d1a1a;border-color:#5a2b2b}
+.saveBtn{background:#73aa73;border-color:#0c0c0c}
 
 .telemetry{display:grid;gap:6px;background:#0c1024;padding:10px;border:1px solid #2d3358;border-radius:12px}
 .telemetry b{color:#9aa5ff}
