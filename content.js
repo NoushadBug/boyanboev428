@@ -135,51 +135,65 @@ function waitForElement(selector, timeout = 10000) {
   });
 }
 
+// Handle auction XHR response
+function handleAuctionResponse(url, json) {
+  return new Promise((resolve) => {
+    if (!url || !/getAuctionsByList/i.test(url)) return resolve(false);
+
+    const { max, when } = highestBetFromAuctions(json || {});
+    const mode = localStorage.getItem("carbacar_mode") || "closed";
+
+    chrome.storage.sync.get(['classic_increament', 'closed_increament'], (store = {}) => {
+      const classic_increament = Number(store.classic_increament ?? 150);
+      const closed_increament  = Number(store.closed_increament ?? 10);
+      const increment = mode === "classic" ? classic_increament : closed_increament;
+      const bidValue = max + increment;
+
+      waitForElement("input.MuiInputBase-input", 5000)
+        .then(input => {
+          setInputValue(input, bidValue);
+          console.log(
+            `🔥 Mode: ${mode} | Highest bid ${max} + ${increment} = ${bidValue} filled into bid input`,
+            when ? `(at ${new Date(when).toLocaleString()})` : ""
+          );
+          localStorage.removeItem("carbacar_mode");
+          resolve(true);
+        })
+        .catch(() => {
+          console.warn("⚠️ Bid input not found in time");
+          resolve(false);
+        });
+    });
+  });
+}
+
+// --- state ---
+let lastXHR = null;
+let lastXHRBody = null;
+let lastXHRJson = null;
+let fillPromise = null; // promise resolved when input is filled
+
+// --- capture first getAuctionsByList XHR (only store once) ---
 window.addEventListener("message", (ev) => {
   const d = ev.data || {};
   if (d.source !== "carbacar-bridge") return;
 
   if (d.name === "fetch" || d.name === "xhr") {
-    const { url, json } = d.payload || {};
-    state.lastSeenJson = json;
+    const { url, body, json } = d.payload || {};
+    if (/getAuctionsByList/i.test(url) && !lastXHR) {
+      lastXHR = url;
+      lastXHRBody = body || null;
+      lastXHRJson = json || null;
+      console.log("📌 Captured getAuctionsByList XHR:", lastXHR, "json:", lastXHRJson);
 
-    try {
-      if (typeof url === "string" && /getAuctionsByList/i.test(url)) {
-        const { max, when } = highestBetFromAuctions(json);
-        if (max !== null) {
-          const mode = localStorage.getItem("carbacar_mode") || "closed";
-
-          // callback-style storage read
-          chrome.storage.sync.get(['classic_increament', 'closed_increament'], (store = {}) => {
-            const classic_increament = Number(store.classic_increament ?? 150);
-            const closed_increament  = Number(store.closed_increament  ?? 10);
-
-            const increment = mode === "classic" ? classic_increament : closed_increament;
-            const bidValue = max + increment;
-
-            waitForElement("input.MuiInputBase-input", 5000)
-              .then((input) => {
-                setInputValue(input, bidValue);
-                console.log(
-                  `🔥 Mode: ${mode} | Highest bid ${max} + ${increment} = ${bidValue} filled into bid input`,
-                  when ? `(at ${new Date(when).toLocaleString()})` : ""
-                );
-                localStorage.removeItem("carbacar_mode");
-              })
-              .catch(() => console.warn("⚠️ Bid input not found in time"));
-          });
-        } else {
-          console.log("ℹ️ No bets found in getAuctionsByList response.");
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to compute highest bid:", e);
+      // auto-schedule once if we have an end time from the response
+      const { newEndDate } = highestBetFromAuctions(lastXHRJson || {});
+      scheduleBid("2025-09-14T16:31:00.000Z");
+      // scheduleBid(newEndDate); 
+      console.log("New End Date XHR:", newEndDate);
     }
   }
 });
-
-
-
 
 
 function setInputValue(element, newValue) {
@@ -207,11 +221,103 @@ function setInputValue(element, newValue) {
   }, 250);
 }
 
+function getLocalTimezone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+function formatInTZ(date, tz) {
+  return date.toLocaleString("en-GB", { timeZone: tz, hour12: false });
+}
+
+// Schedules one replay + one click
+function scheduleBid(targetTimeISO) {
+  if (!targetTimeISO) {
+    console.warn("scheduleBid called without target time");
+    return;
+  }
+
+  const localTZ = getLocalTimezone();
+  const targetTime = new Date(targetTimeISO).getTime();
+  const clickTime  = targetTime - 2000; // 2s before
+  const fetchTime  = targetTime - 4000; // 4s before
+  const now        = Date.now();
+
+  console.log("🌍 Local TZ detected:", localTZ);
+  console.log(`🕒 Now (${localTZ}):`, new Date());
+  console.log(`🎯 Target (${localTZ}):`, formatInTZ(new Date(targetTime), localTZ));
+  console.log(`⏳ Fetch scheduled (${localTZ}):`, formatInTZ(new Date(fetchTime), localTZ));
+  console.log(`⏳ Click scheduled (${localTZ}):`, formatInTZ(new Date(clickTime), localTZ));
+
+  // ensure scheduleBid only schedules once (in case someone calls it multiple times)
+  if (fetchTime > now) {
+    // It's already marked scheduled by the capture; allow but avoid duplicate timers if desired.
+    console.log("⚠️ scheduleBid already scheduled (bidScheduled flag). Proceeding but avoiding duplicates.");
+  }
+
+  // --- Replay XHR 4s before click (only once) ---
+  const fetchDelay = Math.max(fetchTime - now, 0);
+  setTimeout(async () => {
+    if (!lastXHR) {
+      console.warn("⚠️ No getAuctionsByList XHR captured yet — cannot replay.");
+      return;
+    }
+
+    console.log("⚡ Replaying getAuctionsByList XHR (one time)...");
+    try {
+      const options = lastXHRBody
+        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: lastXHRBody }
+        : {};
+
+      const res = await fetch(lastXHR, options);
+      const freshJson = await res.json();
+
+      // fillPromise resolves when input is filled (or false on fail)
+      fillPromise = handleAuctionResponse(lastXHR, freshJson);
+    } catch (err) {
+      console.warn("❌ Failed to replay getAuctionsByList XHR:", err);
+      fillPromise = Promise.resolve(false);
+    }
+  }, fetchDelay);
+
+  // --- Click 2s before target ---
+  const clickDelay = Math.max(clickTime - now, 0);
+  setTimeout(async () => {
+    console.log("✅ Time to click bid button");
+
+    // wait for fillPromise (but don't block forever) — race with short timeout
+    if (fillPromise) {
+      // wait up to 1600ms for the fill to complete, then proceed to click
+      try {
+        await Promise.race([
+          fillPromise,
+          new Promise(res => setTimeout(res, 1600))
+        ]);
+      } catch (e) {
+        // ignore; proceed to click anyway
+      }
+    }
+
+    const container = document.querySelector('[class^="BidBox_puntaOraButton"]');
+    if (container) {
+      const btn = container.querySelector("button");
+      if (btn) {
+        // perform actual click
+        // btn.click();
+        console.log("✅ Clicked Bid button");
+      } else {
+        console.warn("❌ Button inside BidBox not found");
+      }
+    } else {
+      console.warn("❌ BidBox container not found");
+    }
+  }, clickDelay);
+}
 
 function highestBetFromAuctions(resp) {
   const items = Array.isArray(resp?.data) ? resp.data : [];
   let max = -Infinity;
   let when = null;
+  let newEndDate = null;
 
   const pickNum = (v) => {
     const n = Number(v);
@@ -219,6 +325,11 @@ function highestBetFromAuctions(resp) {
   };
 
   for (const item of items) {
+    // capture newEndDate from item
+    if (!newEndDate && item?.newEndDate) {
+      newEndDate = item.newEndDate;
+    }
+
     // regular bets
     for (const b of (item?.bets || [])) {
       const p = pickNum(b?.price);
@@ -240,9 +351,11 @@ function highestBetFromAuctions(resp) {
 
   return {
     max: (max === -Infinity) ? null : max,
+    newEndDate,
     when
   };
 }
+
 
 function stop() {
   state.enabled = false;
