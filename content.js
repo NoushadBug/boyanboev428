@@ -188,8 +188,8 @@ window.addEventListener("message", (ev) => {
 
       // auto-schedule once if we have an end time from the response
       const { newEndDate } = highestBetFromAuctions(lastXHRJson || {});
-      scheduleBid("2025-09-14T16:31:00.000Z");
-      // scheduleBid(newEndDate); 
+      // scheduleBid("2025-09-14T17:39:00.000Z");
+      scheduleBid(newEndDate); 
       console.log("New End Date XHR:", newEndDate);
     }
   }
@@ -302,7 +302,7 @@ function scheduleBid(targetTimeISO) {
       const btn = container.querySelector("button");
       if (btn) {
         // perform actual click
-        // btn.click();
+        btn.click();
         console.log("✅ Clicked Bid button");
       } else {
         console.warn("❌ Button inside BidBox not found");
@@ -941,7 +941,7 @@ function markLoginChecked() {
     if (!plate) return; // only run if a plate param exists
 
     try {
-      const card = await waitForSelector(".VehicleCard_infoContainer__9bIyD", 50000);
+      const card = await waitForSelector('[class*="VehicleCard_infoContainer"]', 50000);
       console.log("Clicking vehicle card for:", plate);
       card.click();
     } catch (err) {
