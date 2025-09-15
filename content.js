@@ -188,7 +188,7 @@ window.addEventListener("message", (ev) => {
 
       // auto-schedule once if we have an end time from the response
       const { newEndDate } = highestBetFromAuctions(lastXHRJson || {});
-      // scheduleBid("2025-09-15T06:41:00.000Z");
+      // scheduleBid("2025-09-15T13:42:00.000Z");
       scheduleBid(newEndDate); 
       console.log("New End Date XHR:", newEndDate);
     }
@@ -295,9 +295,13 @@ function scheduleBid(targetTimeISO) {
       }
 
       const container = document.querySelector('[class^="BidBox_puntaOraButton"]');
+      const existingDiv = document.querySelector('.ccb-processing-bid');
       if (container) {
         const btn = container.querySelector("button");
         if (btn) {
+          if (existingDiv) {
+            existingDiv.remove(); // removes it from DOM
+          }
           btn.click();
           console.log("✅ Clicked Bid button");
         } else {
