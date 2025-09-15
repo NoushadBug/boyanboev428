@@ -188,7 +188,7 @@ window.addEventListener("message", (ev) => {
 
       // auto-schedule once if we have an end time from the response
       const { newEndDate } = highestBetFromAuctions(lastXHRJson || {});
-      // scheduleBid("2025-09-14T17:39:00.000Z");
+      // scheduleBid("2025-09-15T06:41:00.000Z");
       scheduleBid(newEndDate); 
       console.log("New End Date XHR:", newEndDate);
     }
@@ -237,81 +237,79 @@ function scheduleBid(targetTimeISO) {
   }
 
   const localTZ = getLocalTimezone();
-  const targetTime = new Date(targetTimeISO).getTime();
-  const clickTime  = targetTime - 2000; // 2s before
-  const fetchTime  = targetTime - 4000; // 4s before
-  const now        = Date.now();
 
-  console.log("🌍 Local TZ detected:", localTZ);
-  console.log(`🕒 Now (${localTZ}):`, new Date());
-  console.log(`🎯 Target (${localTZ}):`, formatInTZ(new Date(targetTime), localTZ));
-  console.log(`⏳ Fetch scheduled (${localTZ}):`, formatInTZ(new Date(fetchTime), localTZ));
-  console.log(`⏳ Click scheduled (${localTZ}):`, formatInTZ(new Date(clickTime), localTZ));
+  // ✅ Get values from storage first, THEN calculate timing
+  chrome.storage.sync.get(['fetchtime_offset', 'clicktime_offset'], (store = {}) => {
+    const fetchtime_offset = Number(store.fetchtime_offset ?? 2000);
+    const clicktime_offset  = Number(store.clicktime_offset ?? 1000);
 
-  // ensure scheduleBid only schedules once (in case someone calls it multiple times)
-  if (fetchTime > now) {
-    // It's already marked scheduled by the capture; allow but avoid duplicate timers if desired.
-    console.log("⚠️ scheduleBid already scheduled (bidScheduled flag). Proceeding but avoiding duplicates.");
-  }
+    const targetTime = new Date(targetTimeISO).getTime();
+    const clickTime  = targetTime - clicktime_offset;
+    const fetchTime  = targetTime - fetchtime_offset;
+    const now        = Date.now();
 
-  // --- Replay XHR 4s before click (only once) ---
-  const fetchDelay = Math.max(fetchTime - now, 0);
-  setTimeout(async () => {
-    if (!lastXHR) {
-      console.warn("⚠️ No getAuctionsByList XHR captured yet — cannot replay.");
-      return;
-    }
+    console.log("🌍 Local TZ detected:", localTZ);
+    console.log(`🕒 Now (${localTZ}):`, new Date());
+    console.log(`🎯 Target (${localTZ}):`, formatInTZ(new Date(targetTime), localTZ));
+    console.log(`⏳ Fetch scheduled (${localTZ}):`, formatInTZ(new Date(fetchTime), localTZ));
+    console.log(`⏳ Click scheduled (${localTZ}):`, formatInTZ(new Date(clickTime), localTZ));
 
-    console.log("⚡ Replaying getAuctionsByList XHR (one time)...");
-    try {
-      const options = lastXHRBody
-        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: lastXHRBody }
-        : {};
+    // --- Replay XHR before click ---
+    const fetchDelay = Math.max(fetchTime - now, 0);
+    setTimeout(async () => {
+      if (!lastXHR) {
+        console.warn("⚠️ No getAuctionsByList XHR captured yet — cannot replay.");
+        return;
+      }
 
-      const res = await fetch(lastXHR, options);
-      const freshJson = await res.json();
-
-      // fillPromise resolves when input is filled (or false on fail)
-      fillPromise = handleAuctionResponse(lastXHR, freshJson);
-    } catch (err) {
-      console.warn("❌ Failed to replay getAuctionsByList XHR:", err);
-      fillPromise = Promise.resolve(false);
-    }
-  }, fetchDelay);
-
-  // --- Click 2s before target ---
-  const clickDelay = Math.max(clickTime - now, 0);
-  setTimeout(async () => {
-    console.log("✅ Time to click bid button");
-
-    // wait for fillPromise (but don't block forever) — race with short timeout
-    if (fillPromise) {
-      // wait up to 1600ms for the fill to complete, then proceed to click
+      console.log("⚡ Replaying getAuctionsByList XHR (one time)...");
       try {
-        await Promise.race([
-          fillPromise,
-          new Promise(res => setTimeout(res, 1600))
-        ]);
-      } catch (e) {
-        // ignore; proceed to click anyway
-      }
-    }
+        const options = lastXHRBody
+          ? { method: "POST", headers: { "Content-Type": "application/json" }, body: lastXHRBody }
+          : {};
 
-    const container = document.querySelector('[class^="BidBox_puntaOraButton"]');
-    if (container) {
-      const btn = container.querySelector("button");
-      if (btn) {
-        // perform actual click
-        btn.click();
-        console.log("✅ Clicked Bid button");
-      } else {
-        console.warn("❌ Button inside BidBox not found");
+        const res = await fetch(lastXHR, options);
+        const freshJson = await res.json();
+
+        fillPromise = handleAuctionResponse(lastXHR, freshJson);
+      } catch (err) {
+        console.warn("❌ Failed to replay getAuctionsByList XHR:", err);
+        fillPromise = Promise.resolve(false);
       }
-    } else {
-      console.warn("❌ BidBox container not found");
-    }
-  }, clickDelay);
+    }, fetchDelay);
+
+    // --- Click before target ---
+    const clickDelay = Math.max(clickTime - now, 0);
+    setTimeout(async () => {
+      console.log("✅ Time to click bid button");
+
+      if (fillPromise) {
+        try {
+          await Promise.race([
+            fillPromise,
+            new Promise(res => setTimeout(res, 1600))
+          ]);
+        } catch (e) {
+          // ignore; proceed anyway
+        }
+      }
+
+      const container = document.querySelector('[class^="BidBox_puntaOraButton"]');
+      if (container) {
+        const btn = container.querySelector("button");
+        if (btn) {
+          btn.click();
+          console.log("✅ Clicked Bid button");
+        } else {
+          console.warn("❌ Button inside BidBox not found");
+        }
+      } else {
+        console.warn("❌ BidBox container not found");
+      }
+    }, clickDelay);
+  });
 }
+
 
 function highestBetFromAuctions(resp) {
   const items = Array.isArray(resp?.data) ? resp.data : [];

@@ -2,7 +2,7 @@ const qs = s=>document.querySelector(s);
 const qsa = s=>Array.from(document.querySelectorAll(s));
 const badge = qs('#badge');
 const statusEl = qs('#status');
-const fields = ['email','password','classic_increament','closed_increament'];
+const fields = ['email','password','classic_increament','closed_increament','fetchtime_offset','clicktime_offset'];
 const getMode = () => {
   const activeBtn = document.querySelector('.list-tab.active');
   return activeBtn ? activeBtn.getAttribute('data-kind') : null;
