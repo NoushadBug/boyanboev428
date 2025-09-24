@@ -81,9 +81,9 @@ function clickBidButton() {
     existingDiv?.remove();
     
     // Remove disabled class if present
-    btn.className = btn.className.split(' ')
-      .filter(c => !c.includes('BidBox_disabledButton'))
-      .join(' ');
+    // btn.className = btn.className.split(' ')
+    //   .filter(c => !c.includes('BidBox_disabledButton'))
+    //   .join(' ');
     
     // Create and dispatch proper click events
     const events = ['mousedown', 'mouseup', 'click'];

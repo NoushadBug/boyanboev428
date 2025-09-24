@@ -188,7 +188,7 @@ window.addEventListener("message", (ev) => {
 
       // auto-schedule once if we have an end time from the response
       const { newEndDate } = highestBetFromAuctions(lastXHRJson || {});
-      // scheduleBid("2025-09-24T09:24:00.000Z");
+      // scheduleBid("2025-09-24T09:43:00.000Z");
       scheduleBid(newEndDate); 
       console.log("New End Date XHR:", newEndDate);
     }
